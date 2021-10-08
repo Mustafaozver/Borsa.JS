@@ -1,0 +1,557 @@
+<html>
+	<head>
+		<script src="Borsa.js"></script>
+		<script src="js/jquery.min.js"></script>
+		<script src="js/jquery.form.js"></script>
+		<script src="js/jquery-ui.js"></script>
+		<script src="js/Chart.min.js"></script>
+		<script src="js/brain-browser.js"></script>
+		<script src="js/bootstrap.min.js"></script>
+		<script src="js/bootstrap.bundle.min.js"></script>
+		<link rel="stylesheet" href="css/bootstrap.min.css" type="text/css">
+		<link rel="stylesheet" href="css/bootstrap-grid.min.css" type="text/css">
+		<link rel="stylesheet" href="css/bootstrap-reboot.min.css" type="text/css">
+		<link rel="stylesheet" href="css/font-awesome.min.css" type="text/css">
+	</head>
+	<body style="padding:1em;">
+	<script>
+
+var ATA = {}; // ATA
+
+ATA.checkSystem = function() { // Check system
+	this.loop();
+	setTimeout(function(){ATA.checkSystem();},this.loopTime);
+};
+
+ATA.Setups = [];
+ATA.setup = function() { // Setup function
+	for (var i=0;i<this.Setups.length;i++) {
+		try {
+			this.Setups[i]();
+		} catch (e) {
+			
+		}
+	}
+	this.Setups = [];
+	this.checkSystem();
+};
+
+ATA.Loops = [];
+ATA.loop = function() {
+	var newdate = (new Date());
+	for (var i=0;i<this.Loops.length;i++) this.Loops[i](newdate);
+};
+
+ATA.ReadCookie = function(cookie, value) {
+	var name = this.sessionName + "_" + cookie + "=";
+	var decodedCookie = decodeURIComponent(document.cookie);
+	var ca = decodedCookie.split(';');
+	for(var i = 0; i <ca.length; i++) {
+		var c = ca[i];
+		while (c.charAt(0) == ' ') c = c.substring(1);
+		if (c.indexOf(name) == 0) return c.substring(name.length, c.length);
+	}
+	this.WriteCookie(cookie, value);
+	return value;
+}
+
+ATA.WriteCookie = function(cookie, value) {
+	var d = new Date();
+	d.setTime(d.getTime() + (24*60*60*1000));
+	var expires = "expires="+ d.toUTCString();
+	document.cookie = this.sessionName + "_" + cookie + "=" + value + ";" + expires + ";path=/";
+};
+
+ATA.waitUntil = async function(if_, eval_,time_=25) {
+	var promise = new Promise(function(resolve, reject) {
+		var f_temp = function() {
+			if (eval(if_)) {
+				delete f_temp;
+				resolve();
+			} else {
+				setTimeout(f_temp,time_);
+			}
+		};
+		f_temp();
+	}).then(function() {
+		return eval_;
+	});
+	promise = await promise;
+	return promise;
+};
+
+// Borsa
+ATA.Borsa = {
+	Default:"XAU",
+	Assets:[
+		{}, // mine reel
+		{} // imagine
+	],
+	CalculateAsset:function(i=0) {
+		var asset = 0;
+		for (var key in this.Assets[i]) {
+			asset += this.Currencies[key].get()*this.Assets[i][key];
+		}
+		return asset;
+	},
+	Currencies:{},
+	Follows:[],
+	Timer:{
+		time:(new Date()).getTime(),
+		getTime:function() {
+			return ((new Date()).getTime() - this.time)/1000;
+		},
+		reset:function() {
+			this.time = (new Date()).getTime();
+		}
+	},
+	getExcange:function(cur1,cur2) {
+		cur2 = cur2?cur2:this.Default;
+		return this.Currencies[cur1.toUpperCase()].get(0)/this.Currencies[cur2.toUpperCase()].get(0);
+	},
+	getExcangeOld:function(cur1,cur2) {
+		cur2 = cur2?cur2:this.Default;
+		return this.Currencies[cur1.toUpperCase()].get(1)/this.Currencies[cur2.toUpperCase()].get(1);
+	},
+	DoStrategy:function() {
+		var keys = [];
+		for (var key1 in this.Follows) {
+			if (this.Follows[key1] == 0) continue;
+			for (var key2 in this.Follows) {
+				if (this.Follows[key2] === undefined ||
+				this.Follows[key1] === undefined ||
+				this.Follows[key2] == 0) continue;
+				var C1 = this.getExcangeOld(key1,key2);
+				var C2 = this.getExcange(key1,key2);
+				keys.push([key2,key1,C1,C2,C1/C2-1]);
+			}
+		}
+		keys = keys.filter(function (item) {
+			if (Math.abs(item[4]) < 0.01) return false;
+			if (isNaN(item[2]) ||
+			isNaN(item[3]) ||
+			isNaN(item[4]) ||
+			item[3] == 0 ||
+			item[4] == 0 ||
+			!isFinite(item[4])) return false;
+			return true;
+		});
+		keys.sort(function(a, b) {
+			return b[4] - a[4];
+		});
+		var text = "";
+		for (var i=0;i<keys.length/2;i++) {
+			text += "%d[ " + keys[i][0] + " / " + keys[i][1] + " ] = % " + (keys[i][4]*100).toFixed(2) + " \n";
+		}
+		console.log(text);
+	}
+};
+
+	</script>
+	<script>
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var Currency = function(name,val1,val2) { // Prototypes
+	this.Time = (new Date()).getTime();
+	this.Name = name;
+	this.Description = name + "";
+	this.Asset = val2?eval(val2):0;
+	this.Value = [val1?eval(val1):0];
+	this.OldTime = (new Date()).getTime();
+};
+
+Currency.prototype.get = function(n=0) {
+	return this.Value[n];
+};
+
+Currency.prototype.set = function(val) {
+	this.Value.unshift(eval(val));
+	this.OldTime = this.Time;
+	this.Time = (new Date()).getTime();
+};
+
+Currency.prototype.valueOf = function() {
+	return this.get();
+};
+
+Currency.prototype.toString = function() {
+	return this.valueOf();
+};
+
+Currency.prototype.Indicator = function(Indicator) {
+	return this[""+Indicator]();
+};
+
+Currency.prototype.SMA = function(n) {
+	if (n) return sma7 = this.Value.slice(0,n).reduce(function(a, b){
+		return a + b;
+	},0)/n;
+	else this.SMA(7)/this.SMA(26);
+};
+	</script>
+	<script>
+
+var Curs = [
+	"XAU", // metaller
+	"XAG",
+	
+	"TRY", // para birimleri
+	"USD",
+	"EUR",
+	"GBP",
+	"CNY",
+	"RUB",
+	"KWD",
+	"JPY",
+
+	"KNC", // kriptolar
+	"ZRX",
+	"LTC",
+	"ETH",
+	"XRP",
+	"ETC",
+	"OXT",
+	"XTZ",
+	"EOS",
+	"ATOM",
+	"DASH",
+	"BTC",
+	"BCH",
+	"NEO",
+	"REP",
+	"XLM",
+	"LINK",
+	"ZEC",
+	"BAT",
+	"OMG"
+];
+ATA.Borsa.Default = "XAU";
+ATA.Borsa.Follows = {
+	"KNC"	: 1, // kriptolar
+	"ZRX"	: 1,
+	"LTC"	: 1,
+	"ETH"	: 1,
+	"XRP"	: 1,
+	"OXT"	: 1,
+	"XTZ"	: 1,
+	"EOS"	: 1,
+	"ATOM"	: 1,
+	"ETC"	: 1,
+	"DASH"	: 1,
+	"BTC"	: 1,
+	"BCH"	: 1,
+	"NEO"	: 0, // Error, old value is not available
+	"REP"	: 1,
+	"XLM"	: 1,
+	"LINK"	: 1,
+	"ZEC"	: 1,
+	"BAT"	: 1,
+	"OMG"	: 1,
+	
+	// Basic Currencies
+	"XAU"	: 1,
+	"USD"	: 1,
+	"TRY"	: 1
+};
+ATA.Borsa.Assets = [
+	{ // mine reel
+		"XAU"	: 0.06463,
+		"XRP"	: 165.74,
+		"USD"	: 62.79,
+		"LINK"	: 6.81+1.61,
+		"ATOM"	: 6.76+0.14
+	},
+	/*
+	{
+		"TRY"	: 4/11/0.084760, // 2.5/11/parity
+		"XAU"	: 4/11/1000,
+		"XAG"	: 4/11/80,
+		"USD"	: 1/11/0.578060,
+		"GBP"	: 1/11/0.713528,
+		"EUR"	: 2/11/0.641936,
+		"CNY"	: 3/11/0.080991,
+		"JPY"	: 2.5/11/0.005363,
+		"RUB"	: 1/11/0.008240,
+		"BTC"	: 3/11/5521.337200,
+		"KNC"	: 3/11/0.404931
+	}, // imagine
+	*/
+	{
+		"TRY"	: 3.774492813934532*(10**(+0)), // Turkish Lira
+		
+		"XAU"	: 3.199260109090907*(10**(-4)), // Gold Spot
+		"XAG"	: 3.999075136363636*(10**(-3)), // Silver Spot
+		
+		"USD"	: 1.383619394652332*(10**(-1)), // Us Dollar
+		"GBP"	: 1.120930120854020*(10**(-1)), // British Pound
+		"EUR"	: 2.491884011093714*(10**(-1)), // Euro
+		"CNY"	: 2.962607057349806*(10**(+0)), // Chinese Yuan
+		"JPY"	: 3.728393750105945*(10**(+1)), // Japanese Yen
+		"RUB"	: 9.706493049426296*(10**(+0)), // Russian Ruble
+		
+		"BTC"	: 4.345768053829752*(10**(-5)), // Bitcoin
+		"KNC"	: 5.925565298330289*(10**(-1))  // Kyber Network
+	} // imagine
+];
+
+ATA.Borsa.setExcangesforCoinbase = function(currs) {
+	this.Currencies["A"] = new Currency("A",1);
+	for (var key in currs) {
+		if (Curs.indexOf(key.toUpperCase()) == -1) continue;
+		this.Currencies[key] = new Currency(key,1000/eval(currs[key]));
+		AddCard(key,0);
+		ATA.WriteCookie("C_"+key, 1000/eval(currs[key]));
+	}
+};
+
+ATA.Borsa.updateExcangesforCoinbase = function(currs) {
+	var currA = this.Currencies["A"].get();
+	for (var key in currs) {
+		if (Curs.indexOf(key.toUpperCase()) == -1) continue;
+		var oldC = this.Currencies[key].get();
+		var newC = 1000/eval(currs[key]);
+		this.Currencies[key].set(newC);
+		UpdateCard(key,this.getExcange(key,"A"),newC/oldC-1);
+		ATA.WriteCookie("C_"+key, newC);
+	}
+	var asset1 = this.CalculateAsset(0);
+	var asset2 = this.CalculateAsset(1);
+	CalculateAsset(asset1);
+	CalculateAsset2(asset2,asset1);
+	this.Currencies["A"].set(asset2);
+	CalculateExChanges();
+};
+
+ATA.Borsa.setExcangeOld = function(cur1,cur2,val=1) {
+	cur2 = cur2?cur2:this.Default;
+	this.Currencies[cur1.toUpperCase()].Value[1] = val*this.Currencies[cur2.toUpperCase()].get();
+};
+
+ATA.Borsa.Update = function() {
+	$.get("https://api.coinbase.com/v2/exchange-rates?currency=XAU", function(data){
+		ATA.Borsa.updateExcangesforCoinbase(data.data.rates);
+		$(document.all.parites).sortable({});
+	});
+};
+
+function Update() {
+	ATA.Borsa.Update();
+	setTimeout("Update();",10*60);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var revTime = 60*60*24;
+ATA.Loops.push(function() {
+	var esTime = ATA.Borsa.Timer.getTime();
+	var revTime_ = revTime - esTime;
+	$("#information").html(secToHMS(esTime) + " <> " + secToHMS(revTime_));
+	if (revTime_ < 0) {
+		ATA.Borsa.Timer.reset();
+		ATA.Borsa.Update();
+	} else if (esTime % (60*60*4) < 60*5) {
+		if (!$(document).is(":focus")) {
+			window.focus();
+			$("#table").focus();
+			PlaySound("sounds\\did.mp3");
+		}
+		if (esTime % 2 < 1) $("#table").css("background-color","#FFa0a0");
+		else $("#table").css("background-color","#a0a0FF");
+	} else $("#table").css("background-color","white");
+});
+
+ATA.Setups.push(function(){
+	ATA.Setups.push(function() {
+		console.log("ATA started at "+ATA.startTime+".");
+		ATA.Borsa.Timer.reset();
+	});
+	ATA.id = "XAU1";
+	ATA.sessionName = "SESSION1";
+	window.audio = new Audio();
+	window.audio.src = "";
+	window.audio.addEventListener("load", function(){
+		window.audio.play();
+	});
+	$(document.body).append(window.audio);
+	Update();
+});
+
+ATA.Setups.push(function() {
+	window.___olds = {};
+	$.get("https://api.coinbase.com/v2/exchange-rates?currency=XAU", function(data){
+		ATA.Borsa.setExcangesforCoinbase(data.data.rates);
+		window.___olds.XAU = true;
+	});
+	window.___olds.___getOlds = function() {
+		if (this.btcxau && this.btcusd && window.___olds.XAU) {
+			ATA.Borsa.setExcangeOld("BTC","XAU",this.btcxau);
+			ATA.Borsa.setExcangeOld("BTC","USD",this.btcusd);
+			var tempF = function(temp1) {
+				ATA.Borsa.setExcangeOld(temp1.data.base,"USD",eval(temp1.data.amount));
+			};
+			for (var i=0;i<Curs.length;i++) $.get("https://api.coinbase.com/v2/prices/" + Curs[i] + "-USD/spot?date=" + window.___olds.Time__text,tempF).fail(function(){});
+			delete window.___olds;
+			setTimeout(function() {
+				ATA.Borsa.Update();
+				setTimeout(function() {
+					ATA.Borsa.Update();
+					$("#cover").hide();
+					console.clear();
+				},1000);
+			},500);
+		} else {
+			setTimeout(function(){window.___olds.___getOlds();},1000);
+		}
+	};
+	var dundate = getOldDate();
+	window.___olds.Time__text = dundate[0];
+	window.___olds.Time = dundate[1].getTime();
+	$.get("https://api.coinbase.com/v2/prices/BTC-XAU/spot?date=" + window.___olds.Time__text,function(temp1){
+		window.___olds.btcxau = eval(temp1.data.amount);
+		if (window.___olds.btcusd) window.___olds.___getOlds();
+	});
+	$.get("https://api.coinbase.com/v2/prices/BTC-USD/spot?date=" + window.___olds.Time__text,function(temp1){
+		window.___olds.btcusd = eval(temp1.data.amount);
+		if (window.___olds.btcxau) window.___olds.___getOlds();
+	});
+});
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+function getOldDate(n=1) {
+	var date = new Date();
+	date.setDate(date.getDate()-n);
+	var yyyy = date.getFullYear();
+	var dd = date.getDate();
+	var mm = date.getMonth()+1;
+	return [yyyy + "-" + (mm<10?"0":"") + mm + "-" + dd,date];
+}
+
+function AddCard(curr,val) {
+	var element = $("<div class=\"card col-sm-2 "+curr+"\" style=\"width:10rem;margin:0.2em;\"><div class=\"card-body\">"+curr+"<br/>"+val.toFixed(6)+"</div></div>");
+	$(document.all.parites).append(element);
+	UpdateCard(curr,val,0);
+}
+
+function UpdateCard(curr,val,PCent) {
+	var element = $("."+curr+"");
+	if (PCent > 0) element.removeClass("bg-danger").addClass("bg-success");
+	else if (PCent < 0) element.removeClass("bg-success").addClass("bg-danger");
+	else ;
+	$(element.children(".card-body")[0]).html("<b>"+curr+"</b><br/>"+val.toFixed(4)+" <> "+(1/val).toFixed(2)+"<br/><b>% "+(100*PCent).toFixed(2)+"</b>");
+}
+
+function secToHMS(secs) {
+    var sec_num = parseInt(secs, 10);
+    var hours   = Math.floor(sec_num / 3600);
+    var minutes = Math.floor((sec_num - (hours * 3600)) / 60);
+    var seconds = sec_num % 60;
+
+    if (hours   < 10) {hours   = "0"+hours;}
+    if (minutes < 10) {minutes = "0"+minutes;}
+    if (seconds < 10) {seconds = "0"+seconds;}
+    return hours+':'+minutes+':'+seconds;
+}
+
+function CalculateAsset(asset) {
+	var ByGold = (asset/ATA.Borsa.Currencies["XAU"].get()).toFixed(6) + " XAU";
+	var ByDollar = (asset/ATA.Borsa.Currencies["USD"].get()).toFixed(2) + " USD";
+	var ByLira = (asset/ATA.Borsa.Currencies["TRY"].get()).toFixed(2) + " TRY";
+	var text ="" + ByGold + ", " + ByDollar + ", " + ByLira;
+	$("#assets").html(text);
+	console.log(text);
+}
+
+function CalculateAsset2(asset,asset2) {
+	var ByGold = asset/ATA.Borsa.Currencies["XAU"].get();
+	var ByDollar = asset/ATA.Borsa.Currencies["USD"].get();
+	var ByLira = asset/ATA.Borsa.Currencies["TRY"].get();
+	
+	var ByGold = ByGold.toFixed(6) + " XAU ("+(1/ByGold).toFixed(2)+")";
+	var ByDollar = ByDollar.toFixed(2) + " USD ("+(1/ByDollar).toFixed(2)+")";
+	var ByLira = ByLira.toFixed(2) + " TRY ("+(1/ByLira).toFixed(2)+")";
+	var text ="ATC : " + ByGold + ", " + ByDollar + ", " + ByLira + "; AssetATC = " + (asset2/asset).toFixed(6);
+	$("#assets2").html(text);
+	console.log(text);
+}
+
+var ExChanges_ = [
+	"XAU/USD",
+	"EUR/USD",
+	"GBP/USD",
+	"BTC/USD",
+	
+	"USD/TRY",
+	"EUR/TRY",
+	"BTC/TRY",
+	
+	"BTC/A",
+	"XAU/A",
+	
+	"A/TRY",
+	"A/USD",
+	"A/GBP",
+	"A/EUR",
+	"A/KWD"
+];
+
+function CalculateExChanges() {
+	var text = "";
+	for (var i=0;i<ExChanges_.length;i++) {
+		var currencies = ExChanges_[i].split("/");
+		text += ExChanges_[i] + "=" + ATA.Borsa.getExcange(currencies[0],currencies[1]).toFixed(6) + " <br/>\n";
+	}
+	$("#exchanges").html(text);
+}
+
+var PlaySound = function(url){
+	try {
+		window.audio.src = "" + url;
+		window.audio.play();
+	} catch (e) {}
+};
+
+
+
+$(document).ready(function(){
+ATA.setup();
+});
+	</script>
+	<script>
+
+
+
+
+	</script>
+	<table id="table" style="width:100%;height:100%;">
+		<tr style="height:30px;"><td></td><td>
+			<font id="information"></font>
+			<br/> Assets : 
+			<font id="assets"></font>
+			<br/> Currency :
+			<font id="assets2"></font>
+		</td></tr>
+		<tr style="height:30px;"><td></td><td>
+			<button class="btn btn-dark" onclick="ATA.Borsa.Timer.reset();">Reset</button>
+			<button class="btn btn-dark" onclick="ATA.Borsa.Update();">Update</button>
+			<button class="btn btn-dark" onclick="ATA.Borsa.DoStrategy();">Strategy</button>
+		</td></tr>
+		<tr><td style="vertical-align:top;">
+			<div id="exchanges"></div>
+		</td><td style="display:flex;">
+			<div class="grid">
+				<div class="row" id="parites">
+				</div>
+			</div>
+		</td></tr>
+	</table>
+	<div id="cover" style="display:;position:fixed;left:0;top:0;width:100%;height:100%;background-color:white;">
+		<h1>
+			<br/>
+			<br/>
+			<center>Wait...</center>
+		</h1>
+	</div>
+</body>
+</html>
